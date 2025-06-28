@@ -245,6 +245,30 @@ const galaxyMaterial = new THREE.ShaderMaterial({
 const galaxy = new THREE.Points(galaxyGeometry, galaxyMaterial);
 scene.add(galaxy);
 
+function createDefaultTexture() {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+
+    // Tạo gradient màu đẹp làm texture mặc định
+    const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
+    gradient.addColorStop(0.5, "rgba(255, 192, 203, 0.8)");
+    gradient.addColorStop(1, "rgba(255, 192, 203, 0)");
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 256, 256);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    if (renderer && renderer.capabilities) {
+        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    }
+    texture.needsUpdate = true;
+    return texture;
+}
+
 function createNeonTexture(image, renderer) {
     // Tự động chọn size phù hợp thiết bị
     let size = 256;
@@ -421,14 +445,24 @@ for (let group = 0; group < numGroups; group++) {
     // Tải hình ảnh và tạo vật thể
     const img = new window.Image();
     img.crossOrigin = "Anonymous";
-    img.src = heartImages[group];
+    img.onerror = (error) => {
+        console.error("Lỗi load ảnh:", heartImages[group], error);
+        // Fallback: tạo texture mặc định nếu load ảnh thất bại
+        const defaultTexture = createDefaultTexture();
+        createPointsWithTexture(defaultTexture);
+    };
     img.onload = () => {
+        console.log("Load ảnh thành công:", heartImages[group]);
         const neonTexture = createNeonTexture(img, renderer);
+        createPointsWithTexture(neonTexture);
+    };
+    img.src = heartImages[group];
 
+    function createPointsWithTexture(texture) {
         // Material khi ở gần
         const materialNear = new THREE.PointsMaterial({
             size: 1.8,
-            map: neonTexture,
+            map: texture,
             transparent: false,
             alphaTest: 0.2,
             depthWrite: true,
@@ -440,7 +474,7 @@ for (let group = 0; group < numGroups; group++) {
         // Material khi ở xa
         const materialFar = new THREE.PointsMaterial({
             size: 1.8,
-            map: neonTexture,
+            map: texture,
             transparent: true,
             alphaTest: 0.2,
             depthWrite: false,
@@ -458,7 +492,7 @@ for (let group = 0; group < numGroups; group++) {
         pointsObject.userData.geometryFar = groupGeometryFar;
 
         scene.add(pointsObject);
-    };
+    }
 }
 
 // ---- ÁNH SÁNG MÔI TRƯỜNG ----
@@ -466,30 +500,69 @@ const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
 scene.add(ambientLight);
 
 // ---- TẠO NỀN SAO (STARFIELD) ----
-const starCount = 20000;
-const starGeometry = new THREE.BufferGeometry();
-const starPositions = new Float32Array(starCount * 3);
-for (let i = 0; i < starCount; i++) {
-    starPositions[i * 3] = (Math.random() - 0.5) * 900;
-    starPositions[i * 3 + 1] = (Math.random() - 0.5) * 900;
-    starPositions[i * 3 + 2] = (Math.random() - 0.5) * 900;
-}
-starGeometry.setAttribute(
-    "position",
-    new THREE.BufferAttribute(starPositions, 3)
-);
-
-const starMaterial = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 0.7,
-    transparent: true,
-    opacity: 0.7,
-    depthWrite: false,
+// Thêm error handling tổng thể
+window.addEventListener("error", (event) => {
+    console.error("Lỗi toàn cục:", event.error);
 });
-const starField = new THREE.Points(starGeometry, starMaterial);
-starField.name = "starfield";
-starField.renderOrder = 999;
-scene.add(starField);
+
+window.addEventListener("unhandledrejection", (event) => {
+    console.error("Promise rejection chưa xử lý:", event.reason);
+});
+
+// Cải thiện performance cho mobile
+if ("ontouchstart" in window) {
+    // Giảm số lượng sao trên mobile để tăng performance
+    const starCount = 10000; // Giảm từ 20000 xuống 10000
+    const starGeometry = new THREE.BufferGeometry();
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+        starPositions[i * 3] = (Math.random() - 0.5) * 900;
+        starPositions[i * 3 + 1] = (Math.random() - 0.5) * 900;
+        starPositions[i * 3 + 2] = (Math.random() - 0.5) * 900;
+    }
+    starGeometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(starPositions, 3)
+    );
+
+    const starMaterial = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 0.7,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+    });
+    const starField = new THREE.Points(starGeometry, starMaterial);
+    starField.name = "starfield";
+    starField.renderOrder = 999;
+    scene.add(starField);
+} else {
+    // Desktop: giữ nguyên số lượng sao
+    const starCount = 20000;
+    const starGeometry = new THREE.BufferGeometry();
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+        starPositions[i * 3] = (Math.random() - 0.5) * 900;
+        starPositions[i * 3 + 1] = (Math.random() - 0.5) * 900;
+        starPositions[i * 3 + 2] = (Math.random() - 0.5) * 900;
+    }
+    starGeometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(starPositions, 3)
+    );
+
+    const starMaterial = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 0.7,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+    });
+    const starField = new THREE.Points(starGeometry, starMaterial);
+    starField.name = "starfield";
+    starField.renderOrder = 999;
+    scene.add(starField);
+}
 
 // ---- TẠO SAO BĂNG (SHOOTING STARS) ----
 let shootingStars = [];
@@ -1006,16 +1079,31 @@ function preloadGalaxyAudio() {
         galaxyAudio.loop = true;
         galaxyAudio.volume = 1.0;
         galaxyAudio.preload = "auto";
+
+        // Thêm error handling cho audio
+        galaxyAudio.onerror = (error) => {
+            console.warn("Lỗi load audio:", error);
+            // Fallback: tạo audio mới nếu thẻ audio lỗi
+            createFallbackAudio();
+        };
     } else {
         // Fallback: logic cũ nếu không có thẻ audio
-        const audioSources = ["audio/galaxy.mp3"];
-        const randomIndex = Math.floor(Math.random() * audioSources.length);
-        const selectedSrc = audioSources[randomIndex];
-        galaxyAudio = new Audio(selectedSrc);
-        galaxyAudio.loop = true;
-        galaxyAudio.volume = 1.0;
-        galaxyAudio.preload = "auto";
+        createFallbackAudio();
     }
+}
+
+function createFallbackAudio() {
+    const audioSources = ["audio/galaxy.mp3"];
+    const randomIndex = Math.floor(Math.random() * audioSources.length);
+    const selectedSrc = audioSources[randomIndex];
+    galaxyAudio = new Audio(selectedSrc);
+    galaxyAudio.loop = true;
+    galaxyAudio.volume = 1.0;
+    galaxyAudio.preload = "auto";
+
+    galaxyAudio.onerror = (error) => {
+        console.warn("Lỗi load fallback audio:", error);
+    };
 }
 
 function playGalaxyAudio() {
